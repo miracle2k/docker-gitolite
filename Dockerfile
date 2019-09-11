@@ -35,7 +35,7 @@ RUN sed -i '/session    required     pam_loginuid.so/d' /etc/pam.d/sshd
 RUN rm -f /etc/ssh/ssh_host_*
 
 # Use dumb-init as PID1
-ADD https://github.com/Yelp/dumb-init/releases/download/v1.2.0/dumb-init_1.2.0_amd64 /usr/sbin/init
+ADD https://github.com/Yelp/dumb-init/releases/download/v1.2.2/dumb-init_1.2.2_amd64 /usr/sbin/init
 RUN chmod +x /usr/sbin/init
 
 ADD ./init.sh /init
