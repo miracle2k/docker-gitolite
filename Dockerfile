@@ -19,7 +19,7 @@ RUN adduser --system --group --shell /bin/sh git
 RUN su git -c "mkdir /home/git/bin"
 
 RUN cd /home/git; su git -c "git clone git://github.com/sitaramc/gitolite";
-RUN cd /home/git/gitolite; su git -c "git checkout v3.6.11";
+RUN cd /home/git/gitolite; su git -c "git checkout v3.6.12";
 RUN cd /home/git; su git -c "gitolite/install -ln";
 
 # https://github.com/docker/docker/issues/5892
