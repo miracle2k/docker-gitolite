@@ -1,6 +1,6 @@
 FROM ubuntu
 
-MAINTAINER Mike Gardiner <conversationing@gmail.com>
+MAINTAINER Michael Elsdorfer <michael@elsdoerfer.com>
 
 RUN apt-get update
 
