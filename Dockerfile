@@ -2,8 +2,11 @@ FROM ubuntu
 
 MAINTAINER Michael Elsdorfer <michael@elsdoerfer.com>
 
-RUN apt-get update
+# Disables any interactive promps during install, such as from the `tzdata` package
+ARG DEBIAN_FRONTEND=noninteractive
 
+
+RUN apt-get update
 RUN apt-get -y install sudo openssh-server git locales
 
 RUN locale-gen en_US.UTF-8
@@ -35,13 +38,26 @@ RUN rm -f /etc/ssh/ssh_host_*
 ADD https://github.com/Yelp/dumb-init/releases/download/v1.2.2/dumb-init_1.2.2_amd64 /usr/sbin/init
 RUN chmod +x /usr/sbin/init
 
+# Our init script will do some setup work such as generating host keys on a per-container basis.
 ADD ./init.sh /init
+RUN chmod +x /init
 
+ADD ./sshd_config /etc/ssh/sshd_config
+
+# Make sure that the VOLUME intructions work on top of an existing directory which is already
+# accessible by the "git" user (would be root otherwise).
+RUN mkdir /home/git/repositories
+RUN chown -R git:git /home/git/repositories
+
+RUN chown -R git:git /etc/ssh
 # Addind volume to repositories directory
 VOLUME /home/git/repositories
 VOLUME /etc/ssh
 
-RUN chmod +x /init
+
+# Try to run this as non-root
+USER git
+
 ENTRYPOINT ["/usr/sbin/init"]
 CMD ["/init", "/usr/sbin/sshd", "-D"]
 

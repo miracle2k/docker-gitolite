@@ -1,0 +1,51 @@
+# -*- mode: conf -*-
+
+# Based on: https://github.com/hashbang/docker-gitolite
+
+# What ports, IPs and protocols we listen for
+Port         2222
+Protocol     2
+TCPKeepAlive no
+
+
+# Privilege Separation is turned on,
+# but does not use “sandbox” (requires chroot)
+UsePrivilegeSeparation          yes
+
+# Logging.  The log is sent to stderr, and captured by Docker
+LogLevel                        VERBOSE
+
+# Authentication
+LoginGraceTime                  30
+StrictModes                     no     # Required because of the mode of the volume
+PermitRootLogin                 no
+AllowUsers                      git
+
+# Disable things that don't make sense in this container
+PrintMotd                       no
+PrintLastLog                    no
+
+# Allow pubkey auth, without PAM support
+PubkeyAuthentication            yes
+AuthenticationMethods           publickey
+UsePAM                          no
+
+# Explicitely disable everything else
+PasswordAuthentication          no
+KbdInteractiveAuthentication    no
+RhostsRSAAuthentication         no
+HostbasedAuthentication         no
+KerberosAuthentication          no
+GSSAPIAuthentication            no
+RSAAuthentication               no
+
+# Disable extra features
+PermitTTY                       no
+AllowAgentForwarding            no
+PermitUserRC                    no
+AllowStreamLocalForwarding      no
+AllowTcpForwarding              no
+PermitTunnel                    no
+X11Forwarding                   no
+GatewayPorts                    no
+PermitOpen                      none

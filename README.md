@@ -1,12 +1,19 @@
 ### gitolite on docker
 
-Runs an SSH server, serving gitolite as the git@ user.
+Runs a SSH server, serving gitolite as the `git` user. Non-root, that is, sshd
+itself runs as `git`.
 
-On the first start, it will run "gitolite setup" with a starting ssh key
+On the first start, it will run `gitolite setup` with a starting ssh key
 you provided, or you can bootstrap with an existing gitolite-admin repository.
 
 On subsequent starts, will run "gitolite setup" everytime to integrate any
 outside changes.
+
+
+### Changelog
+
+- 2020-09-30: `sshd` no longer runs as `root`, but now runs as the `git` user.
+
 
 ### Examples
 
@@ -17,6 +24,7 @@ New installation:
 Use an existing gitolite installation:
 
     docker run -v /var/vcroot/git:/home/git/repositories elsdoerfer/gitolite
+
 
 ### Environment variables:
 
@@ -33,6 +41,7 @@ These will be inserted into gitolite.rc.
 **TRUST_HOSTS**
 
 Hostnames (only a single one is supported currently) to add to known_hosts, i.e. *github.com*.
+
 
 ### Directories you could bind mount (or use --volumes-from)
 
