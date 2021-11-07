@@ -42,6 +42,17 @@ These will be inserted into gitolite.rc.
 
 Hostnames (only a single one is supported currently) to add to known_hosts, i.e. *github.com*.
 
+**ADMIN**
+
+SSH public key user when initializing gitolite. Defaults to *admin*.
+
+**UID**
+
+Git unix user UID. Repositories user owner.
+
+**GID**
+
+Git unix group GID. Repositories group owner.
 
 ### Directories you could bind mount (or use --volumes-from)
 

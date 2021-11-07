@@ -61,9 +61,10 @@ if [ ! -d ./.gitolite ] ; then
    # gitolite needs to be setup
    if [ -n "$SSH_KEY" ]; then
        echo "Initializing gitolite, while authorizing your selected key for the admin repo"
-       echo "$SSH_KEY" > /tmp/admin.pub
-       bin/gitolite setup -pk /tmp/admin.pub
-       rm /tmp/admin.pub
+       pubkey="/tmp/${ADMIN:-admin}.pub"
+       echo "$SSH_KEY" > "${pubkey}"
+       bin/gitolite setup -pk "${pubkey}"
+       rm "${pubkey}"
    else
        # If no SSH key is given, we instead try to support
        # bootstrapping from an existing gitolite-admin.

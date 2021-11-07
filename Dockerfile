@@ -5,6 +5,9 @@ MAINTAINER Michael Elsdorfer <michael@elsdoerfer.com>
 # Disables any interactive promps during install, such as from the `tzdata` package
 ARG DEBIAN_FRONTEND=noninteractive
 
+# Git user IDs
+ENV UID=1000
+ENV GID=100
 
 RUN apt-get update
 RUN apt-get -y install sudo openssh-server git locales
@@ -18,7 +21,8 @@ RUN sed -i 's/^AcceptEnv LANG LC_\*$//g' /etc/ssh/sshd_config
 
 RUN mkdir /var/run/sshd
 
-RUN adduser --system --group --shell /bin/sh git
+RUN groupadd --non-unique --gid "$GID" git
+RUN adduser --system --shell /bin/sh --uid "$UID" --gid "$GID" git
 RUN su git -c "mkdir /home/git/bin"
 
 RUN cd /home/git; su git -c "git clone git://github.com/sitaramc/gitolite";
@@ -61,4 +65,4 @@ USER git
 ENTRYPOINT ["/usr/sbin/init"]
 CMD ["/init", "/usr/sbin/sshd", "-D"]
 
-EXPOSE 22
+EXPOSE 2222
