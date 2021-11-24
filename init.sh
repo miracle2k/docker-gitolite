@@ -21,7 +21,7 @@ cd /home/git
 
 # If .ssh has been mounted, ensure it has the right permissions
 if [ -d ./.ssh ]; then
-   chown -R git:git ./.ssh
+   chown -R git:git ./.ssh || true
 
 else
   CLIENT_DIR="/home/git/repositories/.ssh/client"
@@ -30,7 +30,7 @@ else
   if [ -d "$CLIENT_DIR" ]; then
     echo "Copying files from $CLIENT_DIR to /home/git/.ssh"
     cp -pr $CLIENT_DIR ./.ssh
-    chown -R git:git ./.ssh
+    chown -R git:git ./.ssh || true
   fi
 fi
 
@@ -55,7 +55,7 @@ if [ ! -d ./.gitolite ] ; then
    # have been bind-mounted; we need to make sure it has the
    # correct access permissions.
    if [ -d ./repositories ] ; then
-       chown -R git:git repositories
+       chown -R git:git repositories || true
    fi
 
    # gitolite needs to be setup
