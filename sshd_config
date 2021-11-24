@@ -7,11 +7,6 @@ Port         2222
 Protocol     2
 TCPKeepAlive no
 
-
-# Privilege Separation is turned on,
-# but does not use “sandbox” (requires chroot)
-UsePrivilegeSeparation          yes
-
 # Logging.  The log is sent to stderr, and captured by Docker
 LogLevel                        VERBOSE
 
@@ -33,11 +28,9 @@ UsePAM                          no
 # Explicitely disable everything else
 PasswordAuthentication          no
 KbdInteractiveAuthentication    no
-RhostsRSAAuthentication         no
 HostbasedAuthentication         no
 KerberosAuthentication          no
 GSSAPIAuthentication            no
-RSAAuthentication               no
 
 # Disable extra features
 PermitTTY                       no
