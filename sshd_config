@@ -28,6 +28,7 @@ PrintLastLog                    no
 # Allow pubkey auth, without PAM support
 PubkeyAuthentication            yes
 AuthenticationMethods           publickey
+PubkeyAcceptedAlgorithms        +ssh-rsa
 UsePAM                          no
 
 # Explicitely disable everything else
