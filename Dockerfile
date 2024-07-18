@@ -1,4 +1,4 @@
-FROM ubuntu
+FROM ubuntu:22.04
 
 MAINTAINER Michael Elsdorfer <michael@elsdoerfer.com>
 
