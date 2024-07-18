@@ -61,4 +61,4 @@ USER git
 ENTRYPOINT ["/usr/sbin/init"]
 CMD ["/init", "/usr/sbin/sshd", "-D"]
 
-EXPOSE 22
+EXPOSE 2222
