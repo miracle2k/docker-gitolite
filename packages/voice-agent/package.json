@@ -1,0 +1,21 @@
+{
+  "name": "@mochi-voice/voice-agent",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": { "mochi-voice": "./dist/bin.js" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mochi-voice/core": "*",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0",
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.5.0"
+  }
+}

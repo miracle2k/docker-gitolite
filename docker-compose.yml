@@ -1,0 +1,53 @@
+services:
+  # The review engine. Exposes MCP over Streamable HTTP at /mcp.
+  mochi-voice:
+    build: .
+    image: mochi-voice:latest
+    restart: unless-stopped
+    ports:
+      - "8765:8765"
+    volumes:
+      - ./data:/data
+    environment:
+      MOCHI_API_TOKEN: ${MOCHI_API_TOKEN:?set MOCHI_API_TOKEN in .env}
+      MCP_AUTH_TOKEN: ${MCP_AUTH_TOKEN:?set MCP_AUTH_TOKEN in .env}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      REVIEW_QUESTION_STYLE: ${REVIEW_QUESTION_STYLE:-rephrase}
+      REVIEW_STRICTNESS: ${REVIEW_STRICTNESS:-balanced}
+      REVIEW_YEAR_TOLERANCE: ${REVIEW_YEAR_TOLERANCE:-3}
+      REVIEW_SYNC_MODE: ${REVIEW_SYNC_MODE:-end-of-session}
+      MOCHI_TAG_SINK: ${MOCHI_TAG_SINK:-true}
+
+  # The voice runtime. Connects OUTBOUND to OpenAI and drives the review
+  # over a sideband socket, so nothing here needs an inbound port and the
+  # phone never holds a Mochi or OpenAI credential.
+  #
+  # Enable with:  docker compose --profile voice up
+  voice-broker:
+    build: .
+    image: mochi-voice:latest
+    restart: unless-stopped
+    profiles: ["voice"]
+    command: ["node", "packages/voice-agent/dist/bin.js", "broker"]
+    ports:
+      - "8766:8766"
+    volumes:
+      - ./data:/data
+    environment:
+      MOCHI_API_TOKEN: ${MOCHI_API_TOKEN:?set MOCHI_API_TOKEN in .env}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?set OPENAI_API_KEY in .env}
+      BROKER_AUTH_TOKEN: ${BROKER_AUTH_TOKEN:?set BROKER_AUTH_TOKEN in .env}
+      OPENAI_REALTIME_MODEL: ${OPENAI_REALTIME_MODEL:-gpt-realtime-2.1}
+      PORT: "8766"
+
+  # Optional: OpenAI's own outbound-only tunnel, if you would rather use
+  # hosted MCP (tools: [{type:"mcp", tunnel_id}]) than the sideband broker.
+  # Verify tunnel_id is accepted on the Realtime surface before relying on it.
+  tunnel:
+    image: ghcr.io/openai/tunnel-client:latest
+    restart: unless-stopped
+    profiles: ["tunnel"]
+    depends_on: [mochi-voice]
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?set OPENAI_API_KEY in .env}
+      TUNNEL_TARGET_URL: http://mochi-voice:8765/mcp
