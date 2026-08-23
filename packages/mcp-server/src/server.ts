@@ -54,23 +54,34 @@ function checkAccess(req: IncomingMessage, config: ServerConfig): string | undef
 }
 
 export async function startHttpServer(config: ServerConfig) {
-  const mcp = createMcpServer(config);
-
-  // Stateless mode: no Mcp-Session-Id, a fresh transport per request.
+  // Stateless mode: no Mcp-Session-Id, and a FRESH server+transport pair per
+  // request.
   //
-  // This is deliberate and load-bearing. The current MCP spec has removed
-  // transport-level sessions entirely, OpenAI's hosted client and Home
-  // Assistant both open a fresh connection per tool call, and review state
-  // lives in the session handle we mint ourselves - so binding anything to a
-  // connection would break the moment a real client connected.
-  const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: undefined,
-    // MUST stay true. OpenAI's hosted MCP client requires POST responses to
-    // be SSE-framed; replying with plain application/json makes the session
-    // silently report zero tools rather than erroring.
-    enableJsonResponse: false,
-  });
-  await mcp.connect(transport);
+  // Reusing one transport across requests looks like an obvious saving and is
+  // a real bug: in stateless mode the transport correlates responses to
+  // callers by raw JSON-RPC request id, and every SDK client starts its ids at
+  // 0. Two overlapping callers - exactly the traffic pattern here, since
+  // OpenAI's hosted client and Home Assistant both open a fresh connection per
+  // tool call - would cross-deliver each other's responses.
+  //
+  // Review state is unaffected because it lives in the session handle we mint
+  // ourselves, not in the transport.
+  const handle = async (req: IncomingMessage, res: ServerResponse) => {
+    const mcp = createMcpServer(config);
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: undefined,
+      // MUST stay false. OpenAI's hosted MCP client requires POST responses to
+      // be SSE-framed; replying with plain application/json makes the session
+      // silently report zero tools rather than erroring.
+      enableJsonResponse: false,
+    });
+    res.on("close", () => {
+      void transport.close();
+      void mcp.close();
+    });
+    await mcp.connect(transport);
+    await transport.handleRequest(req, res);
+  };
 
   const http = createServer((req, res) => {
     const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
@@ -93,7 +104,7 @@ export async function startHttpServer(config: ServerConfig) {
       return;
     }
 
-    transport.handleRequest(req, res).catch((err: unknown) => {
+    handle(req, res).catch((err: unknown) => {
       if (!res.headersSent) {
         res.writeHead(500, { "Content-Type": "application/json" });
       }
@@ -102,5 +113,5 @@ export async function startHttpServer(config: ServerConfig) {
   });
 
   await new Promise<void>((resolve) => http.listen(config.port, config.host, resolve));
-  return { http, mcp, transport };
+  return { http };
 }

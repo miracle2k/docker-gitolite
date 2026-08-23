@@ -170,3 +170,25 @@ describe("selectPrompt", () => {
     expect(selectPrompt(parseCard(c), c)).toBeUndefined();
   });
 });
+
+describe("cloze prompts must not leak the answer", () => {
+  it("asks only the side containing the target cloze", () => {
+    // The back side spells out both answers; speaking it as part of the
+    // question would hand the learner the answer before they say a word.
+    const parsed = parseCard(
+      card({ content: "{{1::Paris}} is the capital of {{2::France}}.\n---\nParis / France" }),
+    );
+    const first = parsed.prompts.find((p) => p.key === "cloze:1")!;
+    expect(first.question).not.toContain("Paris");
+    expect(first.question).toContain("France");
+    expect(first.answer).toBe("Paris");
+    // The other side is kept as post-answer context.
+    expect(first.extra).toContain("Paris / France");
+  });
+
+  it("still asks a single-sided cloze card in full", () => {
+    const parsed = parseCard(card({ content: "The Bastille fell in {{1789}}." }));
+    expect(parsed.prompts[0]!.question).toBe("The Bastille fell in blank.");
+    expect(parsed.prompts[0]!.answer).toBe("1789");
+  });
+});

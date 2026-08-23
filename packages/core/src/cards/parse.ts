@@ -75,20 +75,33 @@ export function parseCard(card: MochiCard, opts: ParseOptions = {}): ParsedCard 
   const prompts: ReviewPrompt[] = [];
 
   if (isCloze) {
-    // Cloze cards are prompted in place: the whole text with one group hidden.
+    // Cloze cards are prompted in place: the text with one group hidden.
+    //
+    // Only the side that CONTAINS the target cloze is spoken as the question.
+    // Using the whole card would read out the later sides too, and on a card
+    // like "{{1::Paris}} is the capital of France --- Paris" that hands the
+    // learner the answer before they have said a word.
     for (const group of clozeGroups(content)) {
-      const blanked = blankCloze(content, group.group, {
+      const key = group.group === null ? "cloze" : `cloze:${group.group}`;
+      const hostIndex = sides.findIndex((side) =>
+        clozeGroups(side).some((g) => g.group === group.group),
+      );
+      const host = hostIndex >= 0 ? sides[hostIndex]! : content;
+      const rest = hostIndex >= 0 ? sides.filter((_, i) => i !== hostIndex) : [];
+
+      const blanked = blankCloze(host, group.group, {
         placeholder: opts.clozePlaceholder ?? "blank",
       });
       const q = toSpeakable(stripSideSeparators(blanked));
       const a = toSpeakable(group.answers.join("; "));
       prompts.push({
-        key: group.group === null ? "cloze" : `cloze:${group.group}`,
+        key,
         kind: "cloze",
         clozeGroup: group.group,
         question: q.text,
         answer: a.text,
-        extra: [],
+        // The other sides are context, revealed only after the answer.
+        extra: rest.map((side) => toSpeakable(revealClozes(side)).text).filter(Boolean),
         speakable: q.speakable && a.speakable,
         notes: [...q.notes, ...a.notes],
       });

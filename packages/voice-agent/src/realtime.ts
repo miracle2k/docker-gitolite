@@ -146,6 +146,7 @@ export interface SidebandOptions {
   socketFactory?: (url: string, headers: Record<string, string>) => WebSocket;
   onEvent?: (event: Record<string, unknown>) => void;
   onClose?: () => void;
+  onError?: (err: Error) => void;
 }
 
 /**
@@ -175,6 +176,13 @@ export function attachSideband(opts: SidebandOptions): { close: () => void } {
     }
     opts.onEvent?.(event);
     void handleEvent(event, opts.ctx, send);
+  });
+
+  // Without an 'error' listener, ws re-throws as an uncaught exception and
+  // takes the whole broker process down - every other in-flight review with
+  // it - when a single call hits a 401, a 429 or a plain ECONNRESET.
+  ws.on("error", (err: unknown) => {
+    opts.onError?.(err instanceof Error ? err : new Error(String(err)));
   });
 
   ws.on("close", () => opts.onClose?.());

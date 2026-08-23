@@ -9,6 +9,7 @@ export * from "./session/engine.js";
 export * from "./session/store.js";
 export * from "./grading/policy.js";
 export * from "./protocol/instructions.js";
+export * from "./config/env.js";
 export * from "./sinks/types.js";
 export * from "./sinks/memory.js";
 export * from "./sinks/jsonl.js";

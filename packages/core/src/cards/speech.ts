@@ -23,14 +23,47 @@ const LINK_RE = /\[([^\]]*)\]\(([^)]*)\)/g;
 const FENCE_RE = /```[\s\S]*?```/g;
 const INLINE_CODE_RE = /`([^`]+)`/g;
 const BLOCK_MATH_RE = /\$\$([\s\S]*?)\$\$/g;
-const INLINE_MATH_RE = /\$([^$\n]+)\$/g;
-const HTML_TAG_RE = /<\/?[a-zA-Z][^>]*>/g;
+/**
+ * Inline math, but not currency.
+ *
+ * A bare /\$([^$\n]+)\$/ reads "$10 to $20" as one math span and deletes both
+ * dollar signs, turning a price range into two naked numbers. Requiring the
+ * opening `$` to be followed by a non-digit, and the closing `$` not to be
+ * followed by a digit, keeps currency intact while still matching `$E = mc^2$`.
+ */
+const INLINE_MATH_RE = /\$(?![\d\s])([^$\n]*?)\$(?!\d)/g;
+/**
+ * Only real HTML tags. A permissive `<[a-zA-Z][^>]*>` also eats `<T>` from
+ * "template<T>" and `<html>` from a card about HTML itself, silently deleting
+ * the very thing being asked about.
+ */
+const HTML_TAG_RE =
+  /<\/?(?:br|b|i|em|strong|div|span|p|sub|sup|u|code|pre|img|a|ul|ol|li|table|thead|tbody|tr|td|th|h[1-6]|hr|blockquote)(?:\s[^>]*)?\/?>/gi;
 const HEADING_RE = /^\s{0,3}#{1,6}\s+/gm;
 const BLOCKQUOTE_RE = /^\s{0,3}>\s?/gm;
-const EMPHASIS_RE = /(\*\*\*|\*\*|\*|___|__|_|~~)(?=\S)([\s\S]*?\S)\1/g;
+const STAR_EMPHASIS_RE = /(\*\*\*|\*\*|\*)(?=\S)([\s\S]*?\S)\1/g;
+const STRIKE_RE = /(~~)(?=\S)([\s\S]*?\S)\1/g;
+/**
+ * Underscore emphasis only at word boundaries.
+ *
+ * Markdown itself does not treat intra-word underscores as emphasis, and
+ * neither can we: `snake_case_name` must survive as written, and `x_1` is a
+ * subscript, not italics.
+ */
+const UNDERSCORE_EMPHASIS_RE =
+  /(?<![\p{L}\p{N}])(___|__|_)(?=\S)([\s\S]*?\S)\1(?![\p{L}\p{N}])/gu;
 const LIST_BULLET_RE = /^\s*[-*+]\s+/gm;
 const HRULE_RE = /^\s*(?:-{4,}|_{3,}|\*{3,})\s*$/gm;
 const TABLE_DIVIDER_RE = /^\s*\|?[\s:|-]+\|[\s:|-]*$/gm;
+/**
+ * Only pipes that are actually table cell separators.
+ *
+ * Replacing every `|` in the document turns "P(A|B)" into "P(A, B)" - a
+ * conditional probability silently becomes a joint one, in the spoken
+ * question AND in the reference answer used for grading. A table row is a
+ * line that starts and ends with a pipe, so only those are flattened.
+ */
+const TABLE_ROW_RE = /^[ \t]*\|.*\|[ \t]*$/gm;
 
 export function toSpeakable(markdown: string): SpeakableResult {
   const notes: string[] = [];
@@ -61,8 +94,18 @@ export function toSpeakable(markdown: string): SpeakableResult {
     .replace(TABLE_DIVIDER_RE, " ")
     .replace(HRULE_RE, " ")
     .replace(LIST_BULLET_RE, "")
-    .replace(EMPHASIS_RE, (_all, _marker, inner: string) => inner)
-    .replace(/\|/g, ", ")
+    .replace(STAR_EMPHASIS_RE, (_all, _marker, inner: string) => inner)
+    .replace(UNDERSCORE_EMPHASIS_RE, (_all, _marker, inner: string) => inner)
+    .replace(STRIKE_RE, (_all, _marker, inner: string) => inner)
+    .replace(TABLE_ROW_RE, (row) =>
+      row
+        .replace(/^[ \t]*\|/, "")
+        .replace(/\|[ \t]*$/, "")
+        .split("|")
+        .map((cell) => cell.trim())
+        .filter(Boolean)
+        .join(", "),
+    )
     .replace(/[ \t]+/g, " ")
     .replace(/\n{3,}/g, "\n\n")
     .trim();

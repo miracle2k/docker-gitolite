@@ -249,3 +249,62 @@ describe("summary", () => {
     expect(s.remaining).toBe(1);
   });
 });
+
+describe("regressions", () => {
+  it("skipping a card does not wedge the session", async () => {
+    // A deferred card has no verdict, so a naive current() reported it as
+    // still awaiting an answer and every front end refused to move on.
+    const e = engineWith();
+    e.next();
+    await e.defer({ reason: "transcript garbled" });
+    expect(e.current()).toBeUndefined();
+    expect(e.next()!.cardId).toBe("c2");
+  });
+
+  it("retries a grade whose sinks all rejected it", async () => {
+    const failing: GradeSink = {
+      name: "bad",
+      capabilities: { revise: true, advancesSchedule: false },
+      record: async () => ({ ok: false, detail: "disk full" }),
+      revise: async () => ({ ok: false, detail: "disk full" }),
+    };
+    const e = engineWith([failing], { syncMode: "immediate" });
+    e.next();
+    await e.grade({ verdict: "forgot" });
+    // Not marked as written, so flush() tries again rather than dropping it.
+    expect(e.log[0]!.syncedAt).toBeUndefined();
+    const flushed = await e.flush();
+    expect(flushed).toHaveLength(1);
+  });
+
+  it("retracts an already-written grade when a card is later skipped", async () => {
+    const sink = new MemorySink();
+    const e = engineWith([sink], { syncMode: "immediate" });
+    e.next();
+    await e.grade({ verdict: "forgot" });
+    expect(sink.recorded).toHaveLength(1);
+
+    await e.defer({ reason: "the mic cut out, do not count that" });
+    // The sink was told to re-derive from an entry that now has no verdict.
+    expect(sink.revisions).toHaveLength(1);
+    expect(e.log[0]!.verdict).toBeUndefined();
+    expect(e.log[0]!.syncedAt).toBeUndefined();
+    // The sink's copy no longer carries a verdict, and flushing at the end
+    // does not resurrect it.
+    expect(sink.recorded[0]!.verdict).toBeUndefined();
+    await e.end();
+    expect(sink.recorded).toHaveLength(1);
+    expect(e.summary().deferred).toBe(1);
+  });
+
+  it("counts a deferred card as neither right nor wrong", async () => {
+    const e = engineWith();
+    e.next();
+    await e.grade({ verdict: "remembered" });
+    await e.defer({ reason: "actually unclear" });
+    const s = e.summary();
+    expect(s.remembered).toBe(0);
+    expect(s.forgot).toBe(0);
+    expect(s.deferred).toBe(1);
+  });
+});

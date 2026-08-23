@@ -471,7 +471,7 @@ Do NOT use this for "I don't know" - that is a real lapse, so grade it 'forgot'.
         ...(back !== undefined ? { back } : {}),
         ...(position !== undefined ? { position } : {}),
       });
-      const entry = session.defer({ reason, ...(tgt ? { target: tgt } : {}) });
+      const entry = await session.defer({ reason, ...(tgt ? { target: tgt } : {}) });
       return textResult(`Card ${entry.cardId} left ungraded.`, {
         card_id: entry.cardId,
         remaining: session.remaining,

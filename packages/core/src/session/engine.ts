@@ -179,10 +179,18 @@ export class ReviewSessionEngine {
     };
   }
 
-  /** The entry currently awaiting a grade, if any. */
+  /**
+   * The entry currently awaiting a grade, if any.
+   *
+   * A deliberately deferred card is NOT awaiting a grade - it has been dealt
+   * with. Treating it as pending would wedge the session, because the tool
+   * surfaces refuse to serve another card while one is unanswered.
+   */
   current(): SessionEntry | undefined {
     const last = this.entries[this.entries.length - 1];
-    return last && last.verdict === undefined ? last : undefined;
+    if (!last) return undefined;
+    if (last.deferred) return undefined;
+    return last.verdict === undefined ? last : undefined;
   }
 
   /**
@@ -237,13 +245,33 @@ export class ReviewSessionEngine {
    * failure - a false "forgot" costs an extra review, but a wrong grade
    * recorded from a broken transcript corrupts the schedule invisibly.
    */
-  defer(input: { reason: string; target?: ReviseTarget } = { reason: "not graded" }): SessionEntry {
+  async defer(
+    input: { reason: string; target?: ReviseTarget } = { reason: "not graded" },
+  ): Promise<SessionEntry> {
     const entry = input.target ? this.resolve(input.target) : (this.current() ?? this.resolve({ back: 0 }));
+    const previous = entry.verdict;
     entry.deferred = true;
     entry.deferredReason = input.reason;
     entry.verdict = undefined;
     entry.verdictSource = undefined;
     entry.answeredAt = this.now().toISOString();
+
+    // If a grade was already written out, retract it. Sinks derive their
+    // state from the entry's current verdict, so a revise call with no
+    // verdict is what removes a tag or logs the retraction.
+    if (entry.syncedAt && previous !== undefined) {
+      const revision: GradeRevision = {
+        at: this.now().toISOString(),
+        from: previous,
+        to: previous,
+        source: "user",
+        reason: `retracted: ${input.reason}`,
+      };
+      for (const sink of this.sinks) {
+        if (sink.capabilities.revise) await sink.revise(entry, revision);
+      }
+      entry.syncedAt = undefined;
+    }
     return entry;
   }
 
@@ -319,9 +347,14 @@ export class ReviewSessionEngine {
       sync.push({ sink: sink.name, ok: res.ok, detail: res.detail });
       if (res.ok && sink.capabilities.advancesSchedule) advanced = true;
     }
-    entry.syncedAt = this.now().toISOString();
     const errs = sync.filter((s) => !s.ok).map((s) => `${s.sink}: ${s.detail}`);
-    if (errs.length) entry.syncErrors = errs;
+    entry.syncErrors = errs.length ? errs : undefined;
+    // Only count it as written if something actually accepted it. Otherwise
+    // leave it unsynced so flush() tries again rather than silently dropping
+    // the grade.
+    if (sync.length === 0 || sync.some((s) => s.ok)) {
+      entry.syncedAt = this.now().toISOString();
+    }
     return { entry, sync, advancedSchedule: advanced };
   }
 

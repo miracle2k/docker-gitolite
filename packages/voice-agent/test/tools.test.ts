@@ -185,3 +185,54 @@ describe("realtime event handling", () => {
     expect(sent).toHaveLength(2); // still replies rather than hanging the call
   });
 });
+
+describe("regressions", () => {
+  it("rejects a verdict it cannot parse instead of guessing", async () => {
+    // Coercing anything-but-"forgot" to "remembered" meant a malformed tool
+    // call silently recorded a correct recall.
+    await call("next_card");
+    for (const bad of [undefined, "Forgot", "incorrect", "", 1, null]) {
+      const r = await call("grade_card", { verdict: bad as unknown });
+      expect(r.error).toContain("remembered");
+      expect(r.instruction).toBeDefined();
+    }
+    // And the card is genuinely still ungraded.
+    const status = await call("session_status");
+    expect(status.remembered).toBe(0);
+    expect(status.forgot).toBe(0);
+  });
+
+  it("rejects an unparseable verdict on revise too", async () => {
+    await call("next_card");
+    await call("grade_card", { verdict: "remembered" });
+    const r = await call("revise_grade", { verdict: "wrong" });
+    expect(r.error).toContain("remembered");
+  });
+
+  it("a malformed tool call does not become a grade", async () => {
+    const sent: Record<string, unknown>[] = [];
+    await call("next_card");
+    await handleEvent(
+      {
+        type: "response.function_call_arguments.done",
+        name: "grade_card",
+        call_id: "fc_x",
+        arguments: "{not json",
+      },
+      ctx,
+      (p) => sent.push(p),
+    );
+    const output = JSON.parse(String((sent[0] as any).item.output));
+    expect(output.error).toBeDefined();
+    const status = await call("session_status");
+    expect(status.remembered).toBe(0);
+  });
+
+  it("skipping does not wedge the voice session either", async () => {
+    await call("next_card");
+    await call("skip_card", { reason: "garbled" });
+    const next = await call("next_card");
+    expect(next.error).toBeUndefined();
+    expect(next.card_id).toBe("c2");
+  });
+});

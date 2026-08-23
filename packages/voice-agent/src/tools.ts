@@ -111,6 +111,11 @@ function engineFor(ctx: ToolContext): ReviewSessionEngine {
   return engine;
 }
 
+/** Strict verdict parsing: anything unexpected is rejected, never guessed. */
+function asVerdict(value: unknown): "remembered" | "forgot" | undefined {
+  return value === "remembered" || value === "forgot" ? value : undefined;
+}
+
 function targetFrom(args: Record<string, unknown>) {
   if (typeof args.card_id === "string" && args.card_id) return { cardId: args.card_id };
   if (typeof args.back === "number") return { back: args.back };
@@ -163,7 +168,17 @@ export async function runTool(
       }
 
       case "grade_card": {
-        const verdict = args.verdict === "forgot" ? "forgot" : "remembered";
+        // Never guess a verdict. Coercing anything-but-"forgot" to
+        // "remembered" means a malformed tool call, a mis-cased value, or
+        // unparseable arguments silently record a correct recall - the exact
+        // failure mode that corrupts a review record invisibly.
+        const verdict = asVerdict(args.verdict);
+        if (!verdict) {
+          return {
+            error: `verdict must be exactly "remembered" or "forgot", got ${JSON.stringify(args.verdict)}`,
+            instruction: "Call grade_card again with a valid verdict, or skip_card if you could not judge the answer.",
+          };
+        }
         const learnerAnswer = typeof args.learner_answer === "string" ? args.learner_answer : undefined;
         const pending = engine.current();
 
@@ -202,7 +217,13 @@ export async function runTool(
       }
 
       case "revise_grade": {
-        const verdict = args.verdict === "forgot" ? "forgot" : "remembered";
+        const verdict = asVerdict(args.verdict);
+        if (!verdict) {
+          return {
+            error: `verdict must be exactly "remembered" or "forgot", got ${JSON.stringify(args.verdict)}`,
+            instruction: "Ask the learner whether it should count, then call revise_grade with a valid verdict.",
+          };
+        }
         const target = targetFrom(args);
         const res = await engine.revise({
           verdict,
@@ -222,7 +243,7 @@ export async function runTool(
       }
 
       case "skip_card": {
-        const entry = engine.defer({
+        const entry = await engine.defer({
           reason: typeof args.reason === "string" ? args.reason : "not graded",
         });
         return {

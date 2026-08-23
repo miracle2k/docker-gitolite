@@ -287,3 +287,72 @@ describe("honesty about write-back", () => {
     expect(mochi.updates[0]!.body["manual-tags"]).toEqual(["mine"]);
   });
 });
+
+describe("regressions", () => {
+  it("skipping a card does not wedge the session", async () => {
+    const sid = (await call("start_review")).structuredContent.session_id;
+    await call("next_card", { session_id: sid });
+    await call("skip_card", { session_id: sid, reason: "garbled" });
+    const next = await call("next_card", { session_id: sid });
+    expect(next.isError).toBeUndefined();
+    expect(next.structuredContent.card_id).toBe("c2");
+  });
+
+  it("retracts the Mochi tag when a graded card is later skipped", async () => {
+    const sid = (await call("start_review")).structuredContent.session_id;
+    await call("next_card", { session_id: sid });
+    await call("grade_card", { session_id: sid, verdict: "forgot" });
+    await call("end_session", { session_id: sid });
+    expect(mochi.updates.at(-1)!.body["manual-tags"]).toEqual(["voice-forgot"]);
+  });
+});
+
+describe("configuration", () => {
+  it("falls back on a blank or invalid setting instead of emitting 'undefined'", async () => {
+    const { settingsFromEnv } = await import("@mochi-voice/core");
+    const blank = settingsFromEnv({ REVIEW_STRICTNESS: "", REVIEW_QUESTION_STYLE: "" });
+    expect(blank.settings.strictness).toBe("balanced");
+    expect(blank.issues).toHaveLength(0);
+
+    const bad = settingsFromEnv({ REVIEW_STRICTNESS: "Strict", REVIEW_QUESTION_STYLE: "natural" });
+    expect(bad.settings.strictness).toBe("balanced");
+    expect(bad.settings.questionStyle).toBe("rephrase");
+    // Reported rather than silently swallowed.
+    expect(bad.issues.map((i) => i.variable)).toEqual([
+      "REVIEW_QUESTION_STYLE",
+      "REVIEW_STRICTNESS",
+    ]);
+  });
+
+  it("honours a legitimate 0 or false rather than treating it as unset", async () => {
+    const { settingsFromEnv } = await import("@mochi-voice/core");
+    const { settings, issues } = settingsFromEnv({
+      REVIEW_YEAR_TOLERANCE: "0",
+      REVIEW_ALWAYS_STATE_ANSWER: "false",
+    });
+    expect(settings.numericTolerance.years).toBe(0);
+    expect(settings.alwaysStateAnswer).toBe(false);
+    expect(issues).toHaveLength(0);
+  });
+
+  it("builds the webhook sink when configured, and marks it honestly", async () => {
+    const { sinksFromEnv, MochiClient } = await import("@mochi-voice/core");
+    const client = new MochiClient({ token: "t" });
+    const { sinks } = sinksFromEnv(
+      { GRADE_WEBHOOK_URL: "https://example.com/hook", GRADE_WEBHOOK_ADVANCES_SCHEDULE: "true" },
+      client,
+    );
+    const webhook = sinks.find((s) => s.name === "webhook");
+    expect(webhook).toBeDefined();
+    expect(webhook!.capabilities.advancesSchedule).toBe(true);
+  });
+
+  it("does not claim a webhook advances the schedule by default", async () => {
+    const { sinksFromEnv, MochiClient } = await import("@mochi-voice/core");
+    const { sinks } = sinksFromEnv(
+      { GRADE_WEBHOOK_URL: "https://example.com/hook" },
+      new MochiClient({ token: "t" }),
+    );
+    expect(sinks.find((s) => s.name === "webhook")!.capabilities.advancesSchedule).toBe(false);
+  });
+});

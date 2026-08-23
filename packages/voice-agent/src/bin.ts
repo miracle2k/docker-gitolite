@@ -2,33 +2,17 @@
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
 import {
-  DEFAULT_SETTINGS,
-  JsonlSink,
   MochiClient,
-  MochiTagSink,
   ReviewSessionEngine,
   SessionStore,
   buildInstructions,
-  type GradeSink,
+  formatIssues,
+  settingsFromEnv,
+  sinksFromEnv,
   type MochiTemplate,
-  type ReviewSettings,
 } from "@mochi-voice/core";
 import { preview } from "./preview.js";
 import { attachSideband, buildSessionConfig, exchangeSdp, mintClientSecret, DEFAULT_MODEL } from "./realtime.js";
-
-function settingsFromEnv(env = process.env): ReviewSettings {
-  const num = (v: string | undefined, d: number) => (Number.isFinite(Number(v)) ? Number(v) : d);
-  return {
-    ...DEFAULT_SETTINGS,
-    questionStyle: (env.REVIEW_QUESTION_STYLE as ReviewSettings["questionStyle"]) ?? DEFAULT_SETTINGS.questionStyle,
-    strictness: (env.REVIEW_STRICTNESS as ReviewSettings["strictness"]) ?? DEFAULT_SETTINGS.strictness,
-    numericTolerance: {
-      years: num(env.REVIEW_YEAR_TOLERANCE, DEFAULT_SETTINGS.numericTolerance.years),
-      relative: num(env.REVIEW_RELATIVE_TOLERANCE, DEFAULT_SETTINGS.numericTolerance.relative),
-    },
-    maxCards: num(env.REVIEW_MAX_CARDS, 0),
-  };
-}
 
 function requireEnv(name: string): string {
   const v = process.env[name];
@@ -39,14 +23,6 @@ function requireEnv(name: string): string {
   return v;
 }
 
-function sinksFor(client: MochiClient): GradeSink[] {
-  const sinks: GradeSink[] = [new JsonlSink(process.env.REVIEW_LOG_PATH ?? "./data/reviews.jsonl")];
-  if ((process.env.MOCHI_TAG_SINK ?? "true") !== "false") {
-    sinks.push(new MochiTagSink({ client, forgotTag: process.env.MOCHI_FORGOT_TAG ?? "voice-forgot" }));
-  }
-  return sinks;
-}
-
 // -------------------------------------------------------------- preview ---
 
 async function cmdPreview(argv: string[]): Promise<void> {
@@ -54,13 +30,15 @@ async function cmdPreview(argv: string[]): Promise<void> {
     token: requireEnv("MOCHI_API_TOKEN"),
     ...(process.env.MOCHI_API_BASE_URL ? { baseUrl: process.env.MOCHI_API_BASE_URL } : {}),
   });
+  const { settings, issues } = settingsFromEnv(process.env);
+  if (issues.length) process.stderr.write(`Ignored bad configuration:\n${formatIssues(issues)}\n`);
   const deckId = argFor(argv, "--deck");
   const date = argFor(argv, "--date");
   const limit = Number(argFor(argv, "--limit") ?? "0") || undefined;
 
   const { lines, skipped, total } = await preview({
     client,
-    settings: settingsFromEnv(),
+    settings,
     ...(deckId ? { deckId } : {}),
     ...(date ? { date } : {}),
     ...(limit ? { limit } : {}),
@@ -80,7 +58,8 @@ async function cmdPreview(argv: string[]): Promise<void> {
 // ---------------------------------------------------------- instructions ---
 
 function cmdInstructions(): void {
-  process.stdout.write(buildInstructions({ settings: settingsFromEnv() }) + "\n");
+  const { settings } = settingsFromEnv(process.env);
+  process.stdout.write(buildInstructions({ settings }) + "\n");
 }
 
 // --------------------------------------------------------------- broker ---
@@ -103,14 +82,18 @@ async function cmdBroker(): Promise<void> {
   const authToken = process.env.BROKER_AUTH_TOKEN ?? "";
   const model = process.env.OPENAI_REALTIME_MODEL ?? DEFAULT_MODEL;
   const port = Number(process.env.PORT ?? 8766);
-  const settings = settingsFromEnv();
+  const { settings, issues } = settingsFromEnv(process.env);
 
   const client = new MochiClient({
     token: mochiToken,
     ...(process.env.MOCHI_API_BASE_URL ? { baseUrl: process.env.MOCHI_API_BASE_URL } : {}),
   });
   const store = new SessionStore();
-  const sinks = sinksFor(client);
+  // Shared with the MCP server, so every documented knob and every sink -
+  // including the webhook, the only one that can claim to move the schedule -
+  // behaves the same on both paths.
+  const { sinks, issues: sinkIssues } = sinksFromEnv(process.env, client);
+  const warnings = formatIssues([...issues, ...sinkIssues]);
 
   const http = createServer((req, res) => {
     const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
@@ -139,10 +122,16 @@ async function cmdBroker(): Promise<void> {
             if (due.some((c) => c["template-id"])) {
               for (const t of await client.listTemplates()) templates.set(t.id, t);
             }
+            // Reverse review is normally enabled on the DECK, not the card.
+            const deckReviewReverse: Record<string, boolean> = {};
+            for (const d of await client.listDecks()) {
+              if (d["review-reverse?"]) deckReviewReverse[d.id] = true;
+            }
             const engine = new ReviewSessionEngine({
               sessionId: randomUUID(),
               cards: due,
               templates,
+              deckReviewReverse,
               settings,
               sinks,
             });
@@ -158,6 +147,10 @@ async function cmdBroker(): Promise<void> {
               ctx: { store, sessionId: engine.sessionId, settings },
               onClose: () => {
                 // Never lose a session's grades because the call dropped.
+                void engine.flush();
+              },
+              onError: (err) => {
+                process.stderr.write(`sideband socket error: ${err.message}\n`);
                 void engine.flush();
               },
             });
@@ -177,6 +170,7 @@ async function cmdBroker(): Promise<void> {
 
   http.listen(port, "0.0.0.0", () => {
     process.stderr.write(`mochi-voice broker listening on :${port} (model ${model})\n`);
+    if (warnings) process.stderr.write(`Ignored bad configuration:\n${warnings}\n`);
     if (!authToken) {
       process.stderr.write("WARNING: BROKER_AUTH_TOKEN is not set; anyone on this network can start a session on your OpenAI key.\n");
     }

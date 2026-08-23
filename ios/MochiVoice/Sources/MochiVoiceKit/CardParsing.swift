@@ -115,12 +115,18 @@ public enum CardParser {
             (#"```[\s\S]*?```"#, " code "),
             (#"\[([^\]]*)\]\([^)]*\)"#, "$1"),    // links: keep the label
             (#"`([^`]+)`"#, "$1"),
-            (#"<[^>]+>"#, " "),
+            // Only real HTML tags: a permissive <[^>]+> also eats <T> from
+            // "template<T>" and <html> from a card about HTML itself.
+            (#"</?(?:br|b|i|em|strong|div|span|p|sub|sup|u|code|pre|img|a|ul|ol|li|table|thead|tbody|tr|td|th|h[1-6]|hr|blockquote)(?:\s[^>]*)?/?>"#, " "),
             (#"(?m)^\s{0,3}#{1,6}\s+"#, ""),
             (#"(?m)^\s{0,3}>\s?"#, ""),
             (#"(?m)^\s*[-*+]\s+"#, ""),
             (#"(?m)^\s*(?:-{4,}|_{3,})\s*$"#, " "),
-            (#"[*_~]{1,3}"#, ""),
+            (#"(\*\*\*|\*\*|\*)(?=\S)([\s\S]*?\S)\1"#, "$2"),
+            (#"(~~)(?=\S)([\s\S]*?\S)\1"#, "$2"),
+            // Underscore emphasis only at word boundaries, so snake_case and
+            // x_1 survive as written.
+            (#"(?<![\p{L}\p{N}])(___|__|_)(?=\S)([\s\S]*?\S)\2(?![\p{L}\p{N}])"#, "$3"),
             (#"\|"#, ", "),
             (#"[ \t]+"#, " "),
         ]
@@ -146,7 +152,19 @@ public enum CardParser {
 
         if hasCloze(content) {
             for group in clozeGroups(content) {
-                let blanked = blankCloze(content, group: group.group)
+                // Ask only the side that CONTAINS the target cloze. Using the
+                // whole card speaks the later sides too, and on a card like
+                // "{{1::Paris}} is the capital of France --- Paris / France"
+                // that hands over the answer before the learner says a word.
+                let hostIndex = sides.firstIndex { side in
+                    clozeGroups(side).contains { $0.group == group.group }
+                }
+                let host = hostIndex.map { sides[$0] } ?? content
+                let rest = hostIndex.map { idx in
+                    sides.enumerated().filter { $0.offset != idx }.map(\.element)
+                } ?? []
+
+                let blanked = blankCloze(host, group: group.group)
                     .replacingOccurrences(of: #"(?m)^\s*---\s*$"#, with: " ", options: .regularExpression)
                 let q = toSpeakable(blanked)
                 let a = toSpeakable(group.answers.joined(separator: "; "))
@@ -155,6 +173,8 @@ public enum CardParser {
                     kind: .cloze,
                     question: q.text,
                     answer: a.text,
+                    // The other sides are context, revealed only after answering.
+                    extra: rest.map { toSpeakable(revealClozes($0)).text }.filter { !$0.isEmpty },
                     speakable: q.speakable && a.speakable
                 ))
             }

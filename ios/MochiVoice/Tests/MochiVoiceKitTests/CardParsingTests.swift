@@ -159,3 +159,25 @@ final class ReviewSessionTests: XCTestCase {
         }
     }
 }
+
+extension CardParsingTests {
+    func testClozePromptDoesNotLeakTheAnswerFromAnotherSide() {
+        // The back side spells out the answer in plain text; speaking it as
+        // part of the question would give the game away.
+        let prompts = CardParser.prompts(
+            content: "{{1::Paris}} is the capital of {{2::France}}.\n---\nParis / France"
+        )
+        let first = prompts.first { $0.key == "cloze:1" }
+        XCTAssertNotNil(first)
+        XCTAssertFalse(first!.question.contains("Paris"))
+        XCTAssertTrue(first!.question.contains("France"))
+        XCTAssertEqual(first!.answer, "Paris")
+        XCTAssertTrue(first!.extra.contains("Paris / France"))
+    }
+
+    func testSingleSidedClozeStillAsksInFull() {
+        let prompts = CardParser.prompts(content: "The Bastille fell in {{1789}}.")
+        XCTAssertEqual(prompts.first?.question, "The Bastille fell in blank.")
+        XCTAssertEqual(prompts.first?.answer, "1789")
+    }
+}

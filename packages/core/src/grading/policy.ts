@@ -66,15 +66,24 @@ const SCALES: Record<string, number> = {
   million: 1_000_000,
 };
 
+/** Words that introduce a decimal fraction: "nine point eight" -> 9.8. */
+const POINT_WORDS = new Set(["point", "decimal"]);
+/** Spoken sign, so "minus two seventy three" is not read as positive. */
+const NEGATIVE_WORDS = new Set(["minus", "negative"]);
+
 type NumWord =
   /** A spoken unit or teen. `opensOnes` marks "oh"/"o", which fills a tens
    *  slot with a leading zero: "nineteen oh five" is 19-05, not 19+0+5. */
   | { kind: "unit"; value: number; opensOnes: boolean }
   | { kind: "tens"; value: number }
   | { kind: "scale"; value: number }
-  | { kind: "digits"; value: number };
+  | { kind: "digits"; value: number }
+  | { kind: "point" }
+  | { kind: "negate" };
 
 function classify(word: string): NumWord | undefined {
+  if (POINT_WORDS.has(word)) return { kind: "point" };
+  if (NEGATIVE_WORDS.has(word)) return { kind: "negate" };
   if (/^-?\d+(?:\.\d+)?$/.test(word)) {
     const n = Number(word);
     return Number.isFinite(n) ? { kind: "digits", value: n } : undefined;
@@ -106,6 +115,7 @@ function groupRun(words: NumWord[]): number[] {
   };
 
   for (const w of words) {
+    if (w.kind === "point" || w.kind === "negate") continue;
     if (w.kind === "scale") {
       current = (current ?? 1) * w.value;
       currentIsTens = false;
@@ -149,6 +159,7 @@ function composeStandard(words: NumWord[]): number | undefined {
   let total = 0;
   let current = 0;
   for (const w of words) {
+    if (w.kind === "point" || w.kind === "negate") continue;
     if (w.kind === "scale") {
       if (w.value >= 1000) {
         total += (current || 1) * w.value;
@@ -171,6 +182,30 @@ function composeStandard(words: NumWord[]): number | undefined {
  * match where the learner said nothing like the answer.
  */
 function runCandidates(words: NumWord[]): number[] {
+  // A leading "minus"/"negative" flips the sign of whatever follows.
+  if (words[0]?.kind === "negate") {
+    return runCandidates(words.slice(1)).map((n) => -n);
+  }
+
+  // A spoken decimal: everything before "point" is the integer part, and each
+  // word after it is one digit after the point.
+  const pointAt = words.findIndex((w) => w.kind === "point");
+  if (pointAt >= 0) {
+    const whole = runCandidates(words.slice(0, pointAt));
+    const digits = words
+      .slice(pointAt + 1)
+      .filter((w): w is Extract<NumWord, { kind: "unit" | "digits" }> =>
+        w.kind === "unit" || w.kind === "digits",
+      )
+      .map((w) => String(Math.abs(w.value)))
+      .join("");
+    if (whole.length && digits) {
+      const value = Number(`${whole[0]}.${digits}`);
+      if (Number.isFinite(value)) return [value];
+    }
+    return whole;
+  }
+
   // A scale word ("hundred", "thousand", "million") means the speaker used
   // standard composition, so that is the only sensible reading.
   if (words.some((w) => w.kind === "scale")) {
@@ -200,19 +235,42 @@ export function extractNumbers(text: string): number[] {
   const norm = normalizeAnswer(text);
 
   // Digits participate in runs alongside words, so "300 million" composes.
-  const words = norm.split(/[\s-]+/).filter(Boolean);
+  //
+  // Splitting on "-" as well as whitespace would eat the minus sign of "-273",
+  // and leaving trailing punctuation attached would make "nine." unclassifiable
+  // - which silently turned "seventeen eighty-nine." into 1780. So: split on
+  // whitespace, strip surrounding punctuation, then break the remainder on
+  // internal hyphens ("eighty-nine") while keeping a leading minus.
+  const words: string[] = [];
+  for (const raw of norm.split(/\s+/)) {
+    const trimmed = raw.replace(/^[.,;:!?]+/, "").replace(/[.,;:!?]+$/, "");
+    if (!trimmed) continue;
+    if (/^-?\d+(?:\.\d+)?$/.test(trimmed)) {
+      words.push(trimmed);
+      continue;
+    }
+    for (const part of trimmed.split("-")) {
+      if (part) words.push(part);
+    }
+  }
+
   let run: NumWord[] = [];
+  let lastWasScale = false;
   const endRun = () => {
     if (run.length) out.push(...runCandidates(run));
     run = [];
+    lastWasScale = false;
   };
   for (const word of words) {
     const c = classify(word);
     if (c) {
       run.push(c);
+      lastWasScale = c.kind === "scale";
       continue;
     }
-    if (word === "and" && run.length > 0) continue;
+    // "two thousand and five" is one number; "nineteen fourteen and nineteen
+    // eighteen" is two. Only a scale word makes a following "and" internal.
+    if (word === "and" && lastWasScale) continue;
     endRun();
   }
   endRun();

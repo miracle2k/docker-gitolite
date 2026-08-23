@@ -25,6 +25,9 @@ async function main(): Promise<void> {
   const { http } = await startHttpServer(config);
   const where = `http://${config.host}:${config.port}/mcp`;
   process.stderr.write(`mochi-voice MCP server listening on ${where}\n`);
+  if (config.warnings) {
+    process.stderr.write(`Ignored bad configuration:\n${config.warnings}\n`);
+  }
   if (!config.authToken) {
     process.stderr.write(
       "WARNING: MCP_AUTH_TOKEN is not set. Anyone who can reach this port can read your cards and tag them. Set it before exposing this beyond your LAN.\n",

@@ -142,3 +142,40 @@ describe("deterministic grading", () => {
     });
   });
 });
+
+describe("regressions in spoken number parsing", () => {
+  it("survives sentence punctuation on a transcript", () => {
+    // Speech transcripts are punctuated. A trailing period used to make the
+    // last word unclassifiable, turning "seventeen eighty-nine." into 1780.
+    has("Seventeen eighty-nine.", 1789);
+    has("1789.", 1789);
+    expect(checkNumeric("1789", "Seventeen eighty-nine.", S).delta).toBe(0);
+  });
+
+  it("reads a spoken decimal", () => {
+    has("nine point eight", 9.8);
+    has("three point one four", 3.14);
+    expect(checkNumeric("9.8", "nine point eight", S).withinTolerance).toBe(true);
+  });
+
+  it("keeps a negative sign", () => {
+    has("-273", -273);
+    has("minus 273", -273);
+    has("negative two hundred seventy three", -273);
+    // A sign error is a real error, not a rounding difference.
+    expect(checkNumeric("-273", "273", S).withinTolerance).toBe(false);
+  });
+
+  it("does not fuse two numbers joined by 'and'", () => {
+    const nums = extractNumbers("between nineteen fourteen and nineteen eighteen");
+    expect(nums).toContain(1914);
+    expect(nums).toContain(1918);
+    // Grading "when did WWI begin" against 1914 must find it exactly.
+    expect(checkNumeric("1914", "between nineteen fourteen and nineteen eighteen", S).delta).toBe(0);
+  });
+
+  it("still joins 'and' inside one standard number", () => {
+    has("two thousand and five", 2005);
+    has("one thousand seven hundred and eighty nine", 1789);
+  });
+});
