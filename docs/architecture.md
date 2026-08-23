@@ -133,7 +133,7 @@ Honesty about what has been exercised:
 
 - **Tested here:** card parsing, grading arithmetic, revision semantics, the
   whole MCP tool protocol against a fake Mochi API, and the Realtime tool
-  bridge against synthetic events. 100 tests.
+  bridge against synthetic events. 132 tests.
 - **Not tested here:** the live Mochi API (no token available), the live
   OpenAI Realtime API (OpenAI hosts were unreachable from this environment),
   the Docker image (no daemon), and all Swift code (no toolchain).

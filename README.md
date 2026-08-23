@@ -160,7 +160,7 @@ legacy-gitolite/      the previous contents of this repo, moved aside
 ## Tests
 
 ```bash
-npm test        # 100 tests
+npm test        # 132 tests
 ```
 
 Covers card parsing, grading arithmetic, revision semantics, and the whole
