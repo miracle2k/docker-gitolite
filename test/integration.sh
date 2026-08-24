@@ -5,6 +5,7 @@ set -euo pipefail
 image="${1:-docker-gitolite:test}"
 workdir="$(mktemp -d)"
 container_id=""
+last_ssh_output=""
 
 # shellcheck disable=SC2317 # Invoked by the EXIT trap below.
 cleanup() {
@@ -12,6 +13,7 @@ cleanup() {
 
   if [[ -n "$container_id" ]]; then
     if (( status != 0 )); then
+      docker inspect --format 'container state: {{.State.Status}} (exit {{.State.ExitCode}}): {{.State.Error}}' "$container_id" >&2 || true
       docker logs "$container_id" >&2 || true
     fi
     docker rm -f "$container_id" >/dev/null 2>&1 || true
@@ -41,8 +43,10 @@ for _ in {1..30}; do
       exit 0
     fi
   fi
+  last_ssh_output="${output:-}"
   sleep 1
 done
 
 echo "Gitolite did not become available over SSH" >&2
+printf 'Last SSH attempt:\n%s\n' "${last_ssh_output:-no connection attempt}" >&2
 exit 1
