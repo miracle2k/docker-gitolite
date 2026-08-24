@@ -34,7 +34,9 @@ RUN apt-get update \
 
 RUN locale-gen en_US.UTF-8
 
-RUN adduser --system --group --shell /bin/sh git \
+# Gitolite installs its executable into $HOME/bin, so set the system user's
+# passwd home explicitly instead of accepting adduser's /nonexistent default.
+RUN adduser --system --group --home /home/git --shell /bin/sh git \
     && install -d -o git -g git -m 0755 /home/git /home/git/bin /home/git/repositories \
     && install -d -m 0755 /run/sshd
 
