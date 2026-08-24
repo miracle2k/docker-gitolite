@@ -35,7 +35,7 @@ RUN apt-get update \
 RUN locale-gen en_US.UTF-8
 
 RUN adduser --system --group --shell /bin/sh git \
-    && install -d -o git -g git -m 0755 /home/git/bin /home/git/repositories \
+    && install -d -o git -g git -m 0755 /home/git /home/git/bin /home/git/repositories \
     && install -d -m 0755 /run/sshd
 
 # Verify the Gitolite tag resolves to the reviewed commit before installing it.
