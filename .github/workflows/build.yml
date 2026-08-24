@@ -21,7 +21,10 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Lint shell scripts
-        run: shellcheck init.sh test/integration.sh
+        run: shellcheck init.sh scripts/release-tag.sh test/integration.sh test/release-tag.sh
+
+      - name: Verify release tag generation
+        run: bash test/release-tag.sh
 
       # A no-cache scheduled build proves that the pinned Ubuntu snapshot,
       # base-image digest, and Gitolite commit still reproduce the image.

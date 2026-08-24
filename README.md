@@ -34,15 +34,30 @@ repositories at build time:
 
 [`.github/workflows/build.yml`](.github/workflows/build.yml) builds from
 scratch and exercises an SSH login on pushes, pull requests, manual runs, and
-monthly. It intentionally does not publish an image, so no registry credential
-is needed. To deliberately refresh the locked package set, update the base
-digest and/or `APT_SNAPSHOT`, then run:
+monthly. It intentionally does not publish an image. To deliberately refresh
+the locked package set, update the base digest and/or `APT_SNAPSHOT`, then run:
 
     docker build --pull --no-cache --tag docker-gitolite:test .
     bash test/integration.sh docker-gitolite:test
 
 Review and merge that change as a normal dependency update; the scheduled job
 will otherwise rebuild the exact same dependency set.
+
+
+### Publishing a release
+
+Run [`.github/workflows/release.yml`](.github/workflows/release.yml) manually
+from `master` to build, test, and publish an explicit release. It needs a
+Docker Hub access token with write permission stored as the `DOCKERHUB_TOKEN`
+Actions secret. The workflow publishes both `elsdoerfer/gitolite:latest` and an
+immutable tag in this format:
+
+    v<gitolite-version>-ubuntu-<ubuntu-lts>-<YYYYMMDD>.<sequence>
+
+For example, the first release of the current source would be
+`v3.6.15-ubuntu-26.04-20260824.1`. It also creates the matching annotated Git
+tag. After the first successful Actions-based release, remove the legacy Docker
+Hub autobuild webhooks so only this workflow can update `latest`.
 
 
 ### Examples
