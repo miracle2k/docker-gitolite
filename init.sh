@@ -98,8 +98,12 @@ if [ ! -d ./.gitolite ]; then
     # refs/heads/master (Gitolite v3.6.14+ supports non-master admin repos).
     admin_repo=/home/git/repositories/gitolite-admin.git
     admin_head=$(git -C "$admin_repo" symbolic-ref HEAD)
-    GL_LIBDIR="$(/home/git/bin/gitolite query-rc GL_LIBDIR)" PATH="$PATH:/home/git/bin" \
-      "$admin_repo/hooks/post-update" "$admin_head"
+    # The hook runs Git commands relative to its bare admin repository.
+    (
+      cd "$admin_repo"
+      GL_LIBDIR="$(/home/git/bin/gitolite query-rc GL_LIBDIR)" PATH="$PATH:/home/git/bin" \
+        hooks/post-update "$admin_head"
+    )
   fi
 else
   # Resync on every restart.
