@@ -40,7 +40,7 @@ RUN adduser --system --group --shell /bin/sh git \
 
 # Verify the Gitolite tag resolves to the reviewed commit before installing it.
 RUN su git -s /bin/sh -c "git clone --depth 1 --branch '${GITOLITE_VERSION}' https://github.com/sitaramc/gitolite.git /home/git/gitolite" \
-    && test "$(git -C /home/git/gitolite rev-parse HEAD)" = "${GITOLITE_COMMIT}" \
+    && su git -s /bin/sh -c "test \"\$(git -C /home/git/gitolite rev-parse HEAD)\" = \"${GITOLITE_COMMIT}\"" \
     && su git -s /bin/sh -c '/home/git/gitolite/install -ln' \
     && rm -rf /home/git/gitolite/.git
 
