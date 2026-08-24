@@ -1,0 +1,32 @@
+name: Build and test image
+
+on:
+  push:
+  pull_request:
+  schedule:
+    # Avoid GitHub Actions' busiest time at the top of the hour.
+    - cron: '17 3 1 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Lint shell scripts
+        run: shellcheck init.sh test/integration.sh
+
+      # A no-cache scheduled build proves that the pinned Ubuntu snapshot,
+      # base-image digest, and Gitolite commit still reproduce the image.
+      - name: Build the pinned image
+        run: docker build --pull --no-cache --tag docker-gitolite:test .
+
+      - name: Verify Gitolite over SSH
+        run: bash test/integration.sh docker-gitolite:test

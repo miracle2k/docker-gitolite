@@ -12,7 +12,37 @@ outside changes.
 
 ### Changelog
 
+- 2026-08-23: Upgrade to Gitolite v3.6.15 and Ubuntu 26.04 LTS; pin the base
+  image, Gitolite commit, and Ubuntu package snapshot.
 - 2020-09-30: `sshd` no longer runs as `root`, but now runs as the `git` user.
+
+
+### Build and update policy
+
+The image is deliberately reproducible rather than tracking mutable package
+repositories at build time:
+
+- Ubuntu 26.04 LTS is pinned to an OCI manifest digest.
+- `APT_SNAPSHOT` in the `Dockerfile` pins the Ubuntu archive used for the
+  image packages and their transitive dependencies. The minimal base image
+  first bootstraps CA roots from Canonical's signed archive so it can reach the
+  HTTPS snapshot service. The `Snapshot:` setting then remains in the image,
+  so a later `apt` command cannot silently select newer packages.
+- Gitolite v3.6.15 is fetched by tag and verified against its immutable commit
+  (`782b05fece05e10f21ce2ed0ba308a8e23f151c2`). This includes the v3.6.14 fix
+  for Gitolite admin repositories whose default branch is not `master`.
+
+[`.github/workflows/build.yml`](.github/workflows/build.yml) builds from
+scratch and exercises an SSH login on pushes, pull requests, manual runs, and
+monthly. It intentionally does not publish an image, so no registry credential
+is needed. To deliberately refresh the locked package set, update the base
+digest and/or `APT_SNAPSHOT`, then run:
+
+    docker build --pull --no-cache --tag docker-gitolite:test .
+    bash test/integration.sh docker-gitolite:test
+
+Review and merge that change as a normal dependency update; the scheduled job
+will otherwise rebuild the exact same dependency set.
 
 
 ### Examples
@@ -49,7 +79,8 @@ Hostnames (only a single one is supported currently) to add to known_hosts, i.e.
 
 `/etc/ssh` - The SSH host keys are stored here; they are generated when the container starts,
   and if you don't maintain them across containers, your clients will see warnings
-  that they changed.
+  that they changed. The image's managed `sshd_config` lives outside this volume,
+  so an existing host-key volume cannot retain a stale server configuration.
 
 
 ### SSH host key
