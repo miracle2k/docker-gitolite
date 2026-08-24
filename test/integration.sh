@@ -23,7 +23,9 @@ cleanup() {
 }
 trap cleanup EXIT
 
-ssh-keygen -q -t ed25519 -N '' -f "$workdir/admin-key"
+# Force the legacy ssh-rsa signature algorithm so this verifies the compatibility
+# setting retained for older RSA-only clients.
+ssh-keygen -q -t rsa -b 3072 -N '' -f "$workdir/admin-key"
 container_id="$(docker run --detach \
   --publish 127.0.0.1::2222 \
   --env SSH_KEY="$(<"$workdir/admin-key.pub")" \
@@ -31,14 +33,18 @@ container_id="$(docker run --detach \
 
 for _ in {1..30}; do
   port="$(docker port "$container_id" 2222/tcp | awk -F: 'NR == 1 { print $NF }')"
-  if [[ -n "$port" ]] && output="$(ssh \
-    -i "$workdir/admin-key" \
-    -o BatchMode=yes \
-    -o StrictHostKeyChecking=no \
-    -o UserKnownHostsFile=/dev/null \
-    -p "$port" \
-    git@127.0.0.1 info 2>&1)"; then
-    if grep -Fq 'gitolite version' <<<"$output"; then
+  if [[ -n "$port" ]]; then
+    # Gitolite's `info` command returns a non-zero status despite producing a
+    # successful response, so inspect its output rather than SSH's status.
+    output="$(ssh \
+      -i "$workdir/admin-key" \
+      -o BatchMode=yes \
+      -o PubkeyAcceptedAlgorithms=ssh-rsa \
+      -o StrictHostKeyChecking=no \
+      -o UserKnownHostsFile=/dev/null \
+      -p "$port" \
+      git@127.0.0.1 info 2>&1 || true)"
+    if grep -Eq 'gitolite(3)? v[0-9]' <<<"$output"; then
       printf '%s\n' "$output"
       exit 0
     fi
