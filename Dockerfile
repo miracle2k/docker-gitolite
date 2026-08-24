@@ -18,12 +18,14 @@ ENV HOME=/home/git \
     LANG=en_US.UTF-8 \
     LC_ALL=en_US.UTF-8
 
-# Ubuntu 26.04's apt supports the Snapshot field in deb822 sources. Keeping it
-# in the image also prevents a later apt invocation from silently drifting.
-RUN sed -i "/^Signed-By:/a Snapshot: ${APT_SNAPSHOT}" /etc/apt/sources.list.d/ubuntu.sources \
+# The minimal Ubuntu base does not contain CA roots. Bootstrap them from the
+# signed canonical archive before switching apt to the HTTPS snapshot service.
+# Keeping Snapshot in the image prevents later apt invocations from drifting.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && sed -i "/^Signed-By:/a Snapshot: ${APT_SNAPSHOT}" /etc/apt/sources.list.d/ubuntu.sources \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
-        ca-certificates \
         dumb-init \
         git \
         locales \
@@ -32,13 +34,15 @@ RUN sed -i "/^Signed-By:/a Snapshot: ${APT_SNAPSHOT}" /etc/apt/sources.list.d/ub
 
 RUN locale-gen en_US.UTF-8
 
-RUN adduser --system --group --shell /bin/sh git \
-    && install -d -o git -g git -m 0755 /home/git/bin /home/git/repositories \
+# Gitolite installs its executable into $HOME/bin, so set the system user's
+# passwd home explicitly instead of accepting adduser's /nonexistent default.
+RUN adduser --system --group --home /home/git --shell /bin/sh git \
+    && install -d -o git -g git -m 0755 /home/git /home/git/bin /home/git/repositories \
     && install -d -m 0755 /run/sshd
 
 # Verify the Gitolite tag resolves to the reviewed commit before installing it.
 RUN su git -s /bin/sh -c "git clone --depth 1 --branch '${GITOLITE_VERSION}' https://github.com/sitaramc/gitolite.git /home/git/gitolite" \
-    && test "$(git -C /home/git/gitolite rev-parse HEAD)" = "${GITOLITE_COMMIT}" \
+    && su git -s /bin/sh -c "test \"\$(git -C /home/git/gitolite rev-parse HEAD)\" = \"${GITOLITE_COMMIT}\"" \
     && su git -s /bin/sh -c '/home/git/gitolite/install -ln' \
     && rm -rf /home/git/gitolite/.git
 

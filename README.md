@@ -23,9 +23,11 @@ The image is deliberately reproducible rather than tracking mutable package
 repositories at build time:
 
 - Ubuntu 26.04 LTS is pinned to an OCI manifest digest.
-- `APT_SNAPSHOT` in the `Dockerfile` pins the complete Ubuntu archive used for
-  both direct and transitive packages. The `Snapshot:` setting remains in the
-  image, so a later `apt` command cannot silently select newer packages.
+- `APT_SNAPSHOT` in the `Dockerfile` pins the Ubuntu archive used for the
+  image packages and their transitive dependencies. The minimal base image
+  first bootstraps CA roots from Canonical's signed archive so it can reach the
+  HTTPS snapshot service. The `Snapshot:` setting then remains in the image,
+  so a later `apt` command cannot silently select newer packages.
 - Gitolite v3.6.15 is fetched by tag and verified against its immutable commit
   (`782b05fece05e10f21ce2ed0ba308a8e23f151c2`). This includes the v3.6.14 fix
   for Gitolite admin repositories whose default branch is not `master`.

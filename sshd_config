@@ -20,6 +20,8 @@ PrintLastLog no
 
 PubkeyAuthentication yes
 AuthenticationMethods publickey
+# Support legacy clients that can sign RSA keys only with ssh-rsa (SHA-1).
+PubkeyAcceptedAlgorithms +ssh-rsa
 UsePAM no
 PasswordAuthentication no
 KbdInteractiveAuthentication no
